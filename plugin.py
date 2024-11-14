@@ -3,6 +3,8 @@ import json
 import urllib.parse
 from bs4 import BeautifulSoup
 import requests
+from datetime import datetime
+import html
 from supybot import callbacks, conf, ircmsgs, log, utils, world
 from supybot.commands import *
 
@@ -41,6 +43,45 @@ class OEmbedParse(callbacks.Plugin):
         is_monitored = domain in monitored_domains
         log.debug(f'OEmbedParse: Domain {domain} monitored status: {is_monitored}')
         return is_monitored
+
+    def _parse_timestamp(self, timestamp_str):
+        """Parse ISO timestamp into a more readable format."""
+        try:
+            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            return dt.strftime('%Y-%m-%d %H:%M UTC')
+        except Exception as e:
+            log.error(f'OEmbedParse: Error parsing timestamp {timestamp_str}: {str(e)}')
+            return timestamp_str
+
+    def _parse_html_content(self, html_content):
+        """Parse the HTML content from oEmbed data to extract meaningful text."""
+        try:
+            log.debug(f'OEmbedParse: Parsing HTML content: {html_content}')
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Extract the main post text
+            post_text = ''
+            p_tag = soup.find('p')
+            if p_tag:
+                post_text = p_tag.get_text().strip()
+                log.debug(f'OEmbedParse: Extracted post text: {post_text}')
+            
+            # Extract timestamp
+            timestamp_link = soup.find_all('a')[-1]  # Usually the last link contains the timestamp
+            timestamp = ''
+            if timestamp_link:
+                timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)', timestamp_link['href'])
+                if timestamp_match:
+                    timestamp = self._parse_timestamp(timestamp_match.group(1))
+                    log.debug(f'OEmbedParse: Extracted timestamp: {timestamp}')
+            
+            return {
+                'text': post_text,
+                'timestamp': timestamp
+            }
+        except Exception as e:
+            log.error(f'OEmbedParse: Error parsing HTML content: {str(e)}')
+            return None
 
     def _fetch_oembed_data(self, url):
         """Fetch oEmbed data for a given URL."""
@@ -118,17 +159,40 @@ class OEmbedParse(callbacks.Plugin):
             log.debug('OEmbedParse: No data to format')
             return None
 
-        parts = []
-        if data.get('title'):
-            parts.append(data['title'])
-        if data.get('author_name'):
-            parts.append(f"by {data['author_name']}")
-        if data.get('provider_name'):
-            parts.append(f"via {data['provider_name']}")
+        try:
+            # Parse the HTML content
+            html_content = data.get('html', '')
+            parsed_content = self._parse_html_content(html_content)
+            
+            if not parsed_content:
+                log.debug('OEmbedParse: Failed to parse HTML content')
+                return None
 
-        formatted = ' | '.join(parts) if parts else None
-        log.debug(f'OEmbedParse: Formatted response: {formatted}')
-        return formatted
+            # Build the response parts
+            parts = []
+            
+            # Add the post text if available
+            if parsed_content['text']:
+                # Decode any HTML entities and normalize whitespace
+                text = html.unescape(parsed_content['text'])
+                text = ' '.join(text.split())  # Normalize whitespace
+                parts.append(text)
+            
+            # Add the author
+            if data.get('author_name'):
+                parts.append(f"-- {data['author_name']}")
+            
+            # Add the timestamp
+            if parsed_content['timestamp']:
+                parts.append(f"({parsed_content['timestamp']})")
+
+            formatted = ' '.join(parts) if parts else None
+            log.debug(f'OEmbedParse: Formatted response: {formatted}')
+            return formatted
+
+        except Exception as e:
+            log.error(f'OEmbedParse: Error formatting response: {str(e)}')
+            return None
 
     def doPrivmsg(self, irc, msg):
         """Listen for messages containing URLs and parse oEmbed data if URL matches a configured domain."""
