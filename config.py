@@ -1,6 +1,14 @@
 import supybot.conf as conf
 import supybot.registry as registry
 
+class ValidChannelValue(registry.Boolean):
+    """Value must be True or False and is channel-specific."""
+    def setValue(self, v):
+        if self._default and not v:
+            # Don't allow unsetting to default to True
+            self._default = False
+        registry.Boolean.setValue(self, v)
+
 def configure(advanced):
     from supybot.questions import expect, anything, something, yn
     conf.registerPlugin('OEmbedParse', True)
@@ -16,6 +24,6 @@ conf.registerGlobalValue(OEmbedParse, 'domains',
 
 # Channel-specific settings
 conf.registerChannelValue(OEmbedParse, 'enabled',
-    registry.Boolean(False, """Enable OEmbed parsing in this channel. 
+    ValidChannelValue(False, """Enable OEmbed parsing in this channel. 
     Enable in a channel using: config channel #channel plugins.OEmbedParse.enabled True
     Disable in a channel using: config channel #channel plugins.OEmbedParse.enabled False"""))

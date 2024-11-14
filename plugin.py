@@ -5,13 +5,13 @@ from bs4 import BeautifulSoup
 import requests
 from datetime import datetime
 import html
-from supybot import callbacks, conf, ircmsgs, log, utils, world, registry
+from supybot import callbacks, conf, ircmsgs, log, utils, world
 from supybot.commands import *
 
 # Maximum length for titles when doing fallback
 MAX_TITLE_LENGTH = 200
 
-class OEmbedParse(callbacks.PluginRegexp):
+class OEmbedParse(callbacks.Plugin):
     """
     A Limnoria plugin to parse oEmbed data for specified URL domains posted in an IRC channel.
     
@@ -25,18 +25,10 @@ class OEmbedParse(callbacks.PluginRegexp):
         config plugins.OEmbedParse.domains remove domain.com
     """
     threaded = True
-    regexps = []
 
     def __init__(self, irc):
         self.__parent = super(OEmbedParse, self)
         self.__parent.__init__(irc)
-        # Ensure channel settings start as disabled
-        for channel in irc.state.channels:
-            try:
-                if self.registryValue('enabled', channel=channel):
-                    self.setRegistryValue('enabled', False, channel=channel)
-            except registry.NonExistentRegistryEntry:
-                continue
         
     def _extract_urls(self, text):
         """Extract URLs from text using regex."""
@@ -214,14 +206,10 @@ class OEmbedParse(callbacks.PluginRegexp):
         if not channel.startswith('#'):
             return
         
-        # Get channel-specific enabled status
-        try:
-            enabled = self.registryValue('enabled', channel)
-            if not enabled:
-                log.debug(f'OEmbedParse: Plugin disabled in channel {channel}')
-                return
-        except registry.NonExistentRegistryEntry:
-            log.debug(f'OEmbedParse: Plugin not configured for channel {channel}')
+        # Check if plugin is enabled for this channel
+        enabled = self.registryValue('enabled', channel)
+        if not enabled:
+            log.debug(f'OEmbedParse: Plugin disabled in channel {channel}')
             return
 
         text = msg.args[1]
