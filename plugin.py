@@ -63,7 +63,7 @@ class OEmbedParse(callbacks.Plugin):
     def _parse_html_content(self, html_content):
         """Parse the HTML content from oEmbed data to extract meaningful text."""
         try:
-            log.debug(f'OEmbedParse: Parsing HTML content: {html_content}')
+            log.debug(f'OEmbedParse: Parsing HTML content:  {html_content}')
             soup = BeautifulSoup(html_content, 'html.parser')
             
             # Extract the main post text
