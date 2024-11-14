@@ -16,7 +16,7 @@ class OEmbedParse(callbacks.Plugin):
     A Limnoria plugin to parse oEmbed data for specified URL domains posted in an IRC channel.
     
     Basic usage:
-    1. Enable in a specific channel:
+    1. Enable in a specific channel (disabled by default):
         config channel #yourchannel plugins.OEmbedParse.enabled True
     
     2. Manage monitored domains using standard config commands:
@@ -63,7 +63,7 @@ class OEmbedParse(callbacks.Plugin):
     def _parse_html_content(self, html_content):
         """Parse the HTML content from oEmbed data to extract meaningful text."""
         try:
-            log.debug(f'OEmbedParse: Parsing HTML content:  {html_content}')
+            log.debug(f'OEmbedParse: Parsing HTML content: {html_content}')
             soup = BeautifulSoup(html_content, 'html.parser')
             
             # Extract the main post text
@@ -206,13 +206,18 @@ class OEmbedParse(callbacks.Plugin):
         if not channel.startswith('#'):
             return
         
-        # Get channel-specific enabled status
-        enabled = self.registryValue('enabled', channel)
-        log.debug(f'OEmbedParse: Plugin enabled status for {channel}: {enabled}')
-        
-        if not enabled:
-            log.debug(f'OEmbedParse: Plugin disabled in channel {channel}')
+        # Get channel-specific enabled status, ensuring we check if it's explicitly set
+        try:
+            enabled = self.registryValue('enabled', channel, network=irc.network)
+            # Only proceed if the setting has been explicitly set to True
+            if not enabled:
+                log.debug(f'OEmbedParse: Plugin not explicitly enabled in channel {channel}')
+                return
+        except registry.NonExistentRegistryEntry:
+            log.debug(f'OEmbedParse: Plugin not configured for channel {channel}')
             return
+
+        log.debug(f'OEmbedParse: Plugin enabled status for {channel}: {enabled}')
 
         text = msg.args[1]
         log.debug(f'OEmbedParse: Processing message: {text}')
