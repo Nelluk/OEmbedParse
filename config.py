@@ -7,14 +7,15 @@ def configure(advanced):
 
 OEmbedParse = conf.registerPlugin('OEmbedParse')
 
+# Global settings
 conf.registerGlobalValue(OEmbedParse, 'domains',
-    registry.SpaceSeparatedListOfStrings([], """List of domains to monitor for oEmbed data."""))
+    registry.SpaceSeparatedListOfStrings([], """List of domains to monitor for oEmbed data. 
+    Add domains using: config plugins.OEmbedParse.domains add domain.com
+    Remove domains using: config plugins.OEmbedParse.domains remove domain.com
+    List domains using: config plugins.OEmbedParse.domains"""))
 
-conf.registerGlobalValue(OEmbedParse, 'enableTitleFallback',
-    registry.Boolean(True, """Enable falling back to page title when oEmbed data is unavailable."""))
-
-conf.registerGlobalValue(OEmbedParse, 'maxTitleLength',
-    registry.PositiveInteger(200, """Maximum length of title to display."""))
-
+# Channel-specific settings
 conf.registerChannelValue(OEmbedParse, 'enabled',
-    registry.Boolean(True, """Enable OEmbed parsing in this channel."""))
+    registry.Boolean(False, """Enable OEmbed parsing in this channel. 
+    Enable in a channel using: config channel #channel plugins.OEmbedParse.enabled True
+    Disable in a channel using: config channel #channel plugins.OEmbedParse.enabled False"""))

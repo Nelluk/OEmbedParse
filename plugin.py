@@ -8,14 +8,21 @@ import html
 from supybot import callbacks, conf, ircmsgs, log, utils, world
 from supybot.commands import *
 
+# Maximum length for titles when doing fallback
+MAX_TITLE_LENGTH = 200
+
 class OEmbedParse(callbacks.Plugin):
     """
     A Limnoria plugin to parse oEmbed data for specified URL domains posted in an IRC channel.
     
-    This plugin listens for messages in configured channels, extracts URLs from these messages,
-    and checks if they belong to domains specified in the plugin's configuration. If a matching
-    domain is found, it attempts to retrieve and parse oEmbed data for the URL. If oEmbed data is
-    unavailable or an error occurs, the plugin fetches the webpage's <title> as a fallback.
+    Basic usage:
+    1. Enable in a specific channel:
+        config channel #yourchannel plugins.OEmbedParse.enabled True
+    
+    2. Manage monitored domains using standard config commands:
+        config plugins.OEmbedParse.domains  (list current domains)
+        config plugins.OEmbedParse.domains add domain.com
+        config plugins.OEmbedParse.domains remove domain.com
     """
     threaded = True
 
@@ -133,13 +140,12 @@ class OEmbedParse(callbacks.Plugin):
             title = soup.title.string if soup.title else None
             
             if title:
-                max_length = self.registryValue('maxTitleLength')
                 title = title.strip()
                 original_length = len(title)
                 
-                if len(title) > max_length:
-                    title = title[:max_length - 3] + '...'
-                    log.debug(f'OEmbedParse: Title truncated from {original_length} to {max_length} chars')
+                if len(title) > MAX_TITLE_LENGTH:
+                    title = title[:MAX_TITLE_LENGTH - 3] + '...'
+                    log.debug(f'OEmbedParse: Title truncated from {original_length} to {MAX_TITLE_LENGTH} chars')
                 
                 log.debug(f'OEmbedParse: Found page title: {title}')
             else:
@@ -200,7 +206,11 @@ class OEmbedParse(callbacks.Plugin):
         if not channel.startswith('#'):
             return
         
-        if not self.registryValue('enabled', channel):
+        # Get channel-specific enabled status
+        enabled = self.registryValue('enabled', channel)
+        log.debug(f'OEmbedParse: Plugin enabled status for {channel}: {enabled}')
+        
+        if not enabled:
             log.debug(f'OEmbedParse: Plugin disabled in channel {channel}')
             return
 
@@ -211,30 +221,24 @@ class OEmbedParse(callbacks.Plugin):
         
         for url in urls:
             domain = self._get_domain(url)
-            if not self._is_monitored_domain(domain):
-                log.debug(f'OEmbedParse: Skipping non-monitored domain {domain}')
-                continue
-
             try:
                 log.debug(f'OEmbedParse: Processing URL {url}')
-                oembed_data = self._fetch_oembed_data(url)
                 
-                if oembed_data:
-                    response = self._format_oembed_response(oembed_data)
-                    if response:
-                        log.debug(f'OEmbedParse: Sending response: {response}')
-                        irc.reply(response, prefixNick=False)
-                        continue
+                # Try oEmbed first for monitored domains
+                if self._is_monitored_domain(domain):
+                    oembed_data = self._fetch_oembed_data(url)
+                    if oembed_data:
+                        response = self._format_oembed_response(oembed_data)
+                        if response:
+                            log.debug(f'OEmbedParse: Sending response: {response}')
+                            irc.reply(response, prefixNick=False)
+                            continue
 
-                # Fallback to title if enabled
-                if self.registryValue('enableTitleFallback'):
-                    log.debug('OEmbedParse: Attempting title fallback')
-                    title = self._get_page_title(url)
-                    if title:
-                        log.debug(f'OEmbedParse: Sending title fallback: {title}')
-                        irc.reply(f'Title: {title}', prefixNick=False)
-                    else:
-                        log.debug('OEmbedParse: No title found in fallback')
+                # Fallback to title for all URLs
+                title = self._get_page_title(url)
+                if title:
+                    log.debug(f'OEmbedParse: Sending title fallback: {title}')
+                    irc.reply(f'Title: {title}', prefixNick=False)
 
             except Exception as e:
                 log.error(f'OEmbedParse: Error processing URL {url}: {str(e)}')
