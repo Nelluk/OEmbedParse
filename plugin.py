@@ -5,13 +5,13 @@ from bs4 import BeautifulSoup
 import requests
 from datetime import datetime
 import html
-from supybot import callbacks, conf, ircmsgs, log, utils, world
+from supybot import callbacks, conf, ircmsgs, log, utils, world, registry
 from supybot.commands import *
 
 # Maximum length for titles when doing fallback
 MAX_TITLE_LENGTH = 200
 
-class OEmbedParse(callbacks.Plugin):
+class OEmbedParse(callbacks.PluginRegexp):
     """
     A Limnoria plugin to parse oEmbed data for specified URL domains posted in an IRC channel.
     
@@ -25,10 +25,18 @@ class OEmbedParse(callbacks.Plugin):
         config plugins.OEmbedParse.domains remove domain.com
     """
     threaded = True
+    regexps = []
 
     def __init__(self, irc):
         self.__parent = super(OEmbedParse, self)
         self.__parent.__init__(irc)
+        # Ensure channel settings start as disabled
+        for channel in irc.state.channels:
+            try:
+                if self.registryValue('enabled', channel=channel):
+                    self.setRegistryValue('enabled', False, channel=channel)
+            except registry.NonExistentRegistryEntry:
+                continue
         
     def _extract_urls(self, text):
         """Extract URLs from text using regex."""
@@ -206,18 +214,15 @@ class OEmbedParse(callbacks.Plugin):
         if not channel.startswith('#'):
             return
         
-        # Get channel-specific enabled status, ensuring we check if it's explicitly set
+        # Get channel-specific enabled status
         try:
-            enabled = self.registryValue('enabled', channel, network=irc.network)
-            # Only proceed if the setting has been explicitly set to True
+            enabled = self.registryValue('enabled', channel)
             if not enabled:
-                log.debug(f'OEmbedParse: Plugin not explicitly enabled in channel {channel}')
+                log.debug(f'OEmbedParse: Plugin disabled in channel {channel}')
                 return
         except registry.NonExistentRegistryEntry:
             log.debug(f'OEmbedParse: Plugin not configured for channel {channel}')
             return
-
-        log.debug(f'OEmbedParse: Plugin enabled status for {channel}: {enabled}')
 
         text = msg.args[1]
         log.debug(f'OEmbedParse: Processing message: {text}')
